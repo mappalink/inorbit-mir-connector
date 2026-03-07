@@ -1,0 +1,30 @@
+# MiR Connector Fleet Configuration
+#
+# Shared settings go under "common:", per-robot overrides at the top level.
+# Environment variables referenced with ${VAR} are expanded at load time.
+
+common:
+  location_tz: Europe/Amsterdam
+  connector_type: MiR200
+  connector_version: "0.1.0"
+
+  env_vars:
+    INORBIT_API_KEY: "${INORBIT_API_KEY}"
+
+  # MiR connection (shared across robots if they share credentials)
+  mir_username: "${MIR_USERNAME}"
+  mir_password: "${MIR_PASSWORD}"
+  mir_host_port: 80
+  mir_firmware_version: "v2"
+  mir_use_ssl: false
+
+mir200-1:
+  robot_name: "MiR200-1"
+  mir_host_address: "10.102.180.126"
+  # Override connector_type if different from common
+  # connector_type: MiR200
+
+mir500-1:
+  robot_name: "MiR500-1"
+  mir_host_address: "10.102.180.27"
+  connector_type: MiR500
