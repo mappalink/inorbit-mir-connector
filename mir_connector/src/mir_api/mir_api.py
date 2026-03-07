@@ -189,15 +189,19 @@ class MirApi:
             body["priority"] = priority
         if description:
             body["description"] = description
-        await self._post(
-            "/mission_queue", headers={"Content-Type": "application/json"}, json=body
-        )
+        await self._post("/mission_queue", headers={"Content-Type": "application/json"}, json=body)
 
     async def abort_all_missions(self):
         await self._delete("/mission_queue", headers={"Content-Type": "application/json"})
 
     async def get_missions_queue(self) -> list:
         return (await self._get("/mission_queue")).json()
+
+    async def get_executing_mission_id(self):
+        """Return the queue ID of the currently executing mission, or None."""
+        missions = await self.get_missions_queue()
+        executing = [m for m in missions if m.get("state") == "Executing"]
+        return executing[0]["id"] if executing else None
 
     async def get_mission(self, mission_queue_id) -> dict:
         mission = (await self._get(f"/mission_queue/{mission_queue_id}")).json()
@@ -239,9 +243,7 @@ class MirApi:
         ).json()
 
     async def delete_mission_definition(self, mission_id: str):
-        await self._delete(
-            f"/missions/{mission_id}", headers={"Content-Type": "application/json"}
-        )
+        await self._delete(f"/missions/{mission_id}", headers={"Content-Type": "application/json"})
 
     # -- Mission groups ---------------------------------------------------
 

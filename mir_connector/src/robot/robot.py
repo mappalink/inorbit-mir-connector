@@ -130,9 +130,7 @@ class Robot:
 
     def _handle_success(self) -> None:
         if self._consecutive_errors > 0:
-            self.logger.info(
-                f"API recovered after {self._consecutive_errors} consecutive errors"
-            )
+            self.logger.info(f"API recovered after {self._consecutive_errors} consecutive errors")
         self._consecutive_errors = 0
         self._backoff_time = 1.0
         self._last_call_successful = True

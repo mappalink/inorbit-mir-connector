@@ -20,7 +20,11 @@ from mir_connector.src.mir_api.missions_group import (
     NullMissionsGroupHandler,
     TmpMissionsGroupHandler,
 )
+from mir_connector.src.mission_exec import MirMissionExecutor
+from mir_connector.src.mission_tracking import MirMissionTracking
 from mir_connector.src.robot.robot import Robot
+
+from inorbit_edge_executor.inorbit import InOrbitAPI
 from mir_connector.src.utils import to_inorbit_percent, calculate_usage_percent
 
 # Available MiR states to select via actions
@@ -83,11 +87,32 @@ class MirConnector(Connector):
                 f"Unknown timezone: '{config.location_tz}', defaulting to 'UTC'. {ex}"
             )
 
+        # Native MiR mission tracking (reports MiR-native missions to InOrbit UI)
+        self.mission_tracking = MirMissionTracking(
+            mir_api=self.mir_api,
+            inorbit_session=self._get_session(),
+            robot_tz_info=self.robot_tz_info,
+        )
+
         # Temporary mission groups for waypoint navigation
         if config.connector_config.enable_temporary_mission_group:
             self.mission_group = TmpMissionsGroupHandler(mir_api=self.mir_api)
         else:
             self.mission_group = NullMissionsGroupHandler()
+
+        # Edge mission executor
+        self.mission_executor = MirMissionExecutor(
+            robot_id=robot_id,
+            inorbit_api=InOrbitAPI(
+                base_url=self._get_session().inorbit_rest_api_endpoint,
+                api_key=config.api_key,
+            ),
+            mir_api=self.mir_api,
+            database_file=config.connector_config.mission_database_file,
+            missions_group=self.mission_group,
+            firmware_version=config.connector_config.mir_firmware_version,
+            connector_type=config.connector_type,
+        )
 
         # Initialize status as None to prevent publishing before the robot is connected
         self.status = None
@@ -98,8 +123,10 @@ class MirConnector(Connector):
     async def _connect(self) -> None:
         self.robot.start()
         await self.mission_group.start()
+        await self.mission_executor.initialize()
 
     async def _disconnect(self) -> None:
+        await self.mission_executor.shutdown()
         await self.mission_group.cleanup_connector_missions()
         await self.mission_group.stop()
         await self.robot.stop()
@@ -112,6 +139,15 @@ class MirConnector(Connector):
         self.status = status
         self.metrics = self.robot.metrics
         self.diagnostics = self.robot.diagnostics
+
+        # Feed native map ID to the mission executor's worker pool
+        map_id = self.status.get("map_id", "")
+        if map_id and self.mission_executor._worker_pool:
+            self.mission_executor._worker_pool.set_native_map_id(map_id)
+
+        # Re-enable native mission tracking when edge executor has no active missions
+        if self.mission_executor._worker_pool and not self.mission_executor._worker_pool._workers:
+            self.mission_tracking.mir_mission_tracking_enabled = True
 
         # Pose (degrees -> radians)
         self.publish_pose(
@@ -147,9 +183,7 @@ class MirConnector(Connector):
         }
 
         # Localization score from metrics
-        key_values["localization_score"] = (self.metrics or {}).get(
-            "mir_robot_localization_score"
-        )
+        key_values["localization_score"] = (self.metrics or {}).get("mir_robot_localization_score")
 
         # System stats
         system_stats = {}
@@ -163,18 +197,20 @@ class MirConnector(Connector):
         if hasattr(self, "_last_api_connected") and self._last_api_connected != key_values.get(
             "api_connected"
         ):
-            self._logger.info(
-                f"API connection status changed: {key_values.get('api_connected')}"
-            )
+            self._logger.info(f"API connection status changed: {key_values.get('api_connected')}")
         self._last_api_connected = key_values.get("api_connected")
 
         self.publish_key_values(**key_values)
         if system_stats:
             self.publish_system_stats(**system_stats)
 
-    def _parse_diagnostics(
-        self, key_values: dict, system_stats: dict, diagnostics: dict
-    ) -> None:
+        # Report native MiR mission progress to InOrbit
+        try:
+            await self.mission_tracking.report_mission(self.status, self.metrics or {})
+        except Exception:
+            self._logger.debug("Error reporting mission", exc_info=True)
+
+    def _parse_diagnostics(self, key_values: dict, system_stats: dict, diagnostics: dict) -> None:
         """Extract vitals from diagnostics (preferred) or status (fallback)."""
         # Battery
         batt_vals = (diagnostics.get(BATTERY_PATH, {}) or {}).get("values", {})
@@ -302,10 +338,12 @@ class MirConnector(Connector):
         script_args = dict(zip(args_raw[::2], args_raw[1::2]))
         self._logger.debug(f"Parsed arguments: {script_args}")
 
-        # TODO: Add edge-executor delegation here when implementing edge execution
-        # handled = await self.mission_executor.handle_command(script_name, script_args, options)
-        # if handled:
-        #     return
+        # Try edge-executor first (handles executeMissionAction, cancelMissionAction, etc.)
+        handled = await self.mission_executor.handle_command(script_name, script_args, options)
+        if handled:
+            # Disable native mission tracking while edge executor is active
+            self.mission_tracking.mir_mission_tracking_enabled = False
+            return
 
         if script_name == "queue_mission" and "--mission_id" in script_args:
             await self.mir_api.queue_mission(script_args["--mission_id"])
@@ -358,7 +396,6 @@ class MirConnector(Connector):
     async def _send_waypoint_over_missions(self, pose):
         """Create a temporary move mission and queue it."""
         mission_id = str(uuid.uuid4())
-        connector_type = self.config.connector_type
         firmware_version = self.config.connector_config.mir_firmware_version
 
         if not self.mission_group.missions_group_id:

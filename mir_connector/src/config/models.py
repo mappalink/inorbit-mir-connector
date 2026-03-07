@@ -72,7 +72,5 @@ class ConnectorConfig(InorbitConnectorConfig):
     @field_validator("connector_type")
     def connector_type_validation(cls, v):
         if v not in CONNECTOR_TYPES:
-            raise ValueError(
-                f"Unexpected connector type '{v}'. Expected one of {CONNECTOR_TYPES}"
-            )
+            raise ValueError(f"Unexpected connector type '{v}'. Expected one of {CONNECTOR_TYPES}")
         return v
