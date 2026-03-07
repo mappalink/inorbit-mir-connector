@@ -46,9 +46,7 @@ class CustomParser(argparse.ArgumentParser):
 def start() -> None:
     """Main entry point. Parses args, loads config, starts connector."""
     parser = CustomParser(prog="mir-connector")
-    parser.add_argument(
-        "-c", "--config", type=str, required=True, help="Path to fleet YAML config"
-    )
+    parser.add_argument("-c", "--config", type=str, required=True, help="Path to fleet YAML config")
     parser.add_argument(
         "-id", "--robot_id", type=str, required=True, help="Robot ID from fleet YAML"
     )
