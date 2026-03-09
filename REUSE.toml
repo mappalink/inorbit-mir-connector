@@ -19,3 +19,23 @@ path = ".python-version"
 SPDX-FileCopyrightText = "N/A"
 SPDX-License-Identifier = "MIT"
 SPDX-FileComment = "Python version file"
+
+[[annotations]]
+path = ".gitattributes"
+SPDX-FileCopyrightText = "N/A"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "config/example.env"
+SPDX-FileCopyrightText = "2026 Mappalink"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "config/fleet.example.yaml"
+SPDX-FileCopyrightText = "2026 Mappalink"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "docker-compose.yaml"
+SPDX-FileCopyrightText = "2026 Mappalink"
+SPDX-License-Identifier = "MIT"
