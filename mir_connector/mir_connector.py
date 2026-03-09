@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from mir_connector.src.connector import MirConnector
 from mir_connector.src.config.models import ConnectorConfig
-from mir_connector.src.config.fleet_config_loader import get_robot_config
+from mir_connector.src.config.fleet_config_loader import get_robot_config, validate_config_structure
 
 
 def setup_logging():
@@ -57,10 +57,28 @@ def start() -> None:
         default="INFO",
         help="Logging level (default: INFO)",
     )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate the fleet config file and exit",
+    )
     args = parser.parse_args()
 
     if args.log_level:
         logging.getLogger().setLevel(getattr(logging, args.log_level.upper()))
+
+    if args.validate:
+        result = validate_config_structure(args.config)
+        LOGGER.info(f"Config validation: {result['structure_type']} structure")
+        LOGGER.info(f"Robots found: {result['robots']}")
+        if result["suggestions"]:
+            for s in result["suggestions"]:
+                LOGGER.warning(f"Suggestion: {s}")
+        if not result["valid"]:
+            LOGGER.error(f"Config is invalid: {result.get('error', 'see suggestions')}")
+            sys.exit(1)
+        LOGGER.info("Config is valid")
+        sys.exit(0)
 
     try:
         config = ConnectorConfig(**get_robot_config(args.config, args.robot_id))

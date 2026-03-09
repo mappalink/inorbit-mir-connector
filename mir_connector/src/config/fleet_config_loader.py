@@ -106,3 +106,47 @@ def _expand_env_vars(obj: Any) -> Any:
     elif isinstance(obj, str):
         return os.path.expandvars(obj)
     return obj
+
+
+def validate_config_structure(config_filename: str) -> dict[str, Any]:
+    """Validate the fleet configuration file and provide helpful diagnostics.
+
+    Returns a dict with keys: valid, structure_type, robots, has_common_section,
+    suggestions.
+    """
+    try:
+        with open(config_filename, "r", encoding="utf-8") as f:
+            full_config = yaml.safe_load(f) or {}
+    except Exception as e:
+        return {
+            "valid": False,
+            "error": str(e),
+            "suggestions": ["Check if the file exists and has valid YAML syntax"],
+        }
+
+    validation: dict[str, Any] = {
+        "valid": True,
+        "structure_type": "unknown",
+        "robots": [],
+        "has_common_section": False,
+        "suggestions": [],
+    }
+
+    if "common" in full_config:
+        validation["structure_type"] = "hierarchical"
+        validation["has_common_section"] = True
+        validation["robots"] = [k for k in full_config if k != "common"]
+    else:
+        validation["structure_type"] = "flat"
+        validation["robots"] = list(full_config.keys())
+
+    if not validation["has_common_section"]:
+        validation["suggestions"].append(
+            "Consider adding a 'common' section to reduce configuration duplication"
+        )
+
+    if len(validation["robots"]) == 0:
+        validation["valid"] = False
+        validation["suggestions"].append("No robot configurations found")
+
+    return validation
