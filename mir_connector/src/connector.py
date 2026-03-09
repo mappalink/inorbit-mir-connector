@@ -126,11 +126,15 @@ class MirConnector(Connector):
         await self.mission_executor.initialize()
 
     async def _disconnect(self) -> None:
-        await self.mission_executor.shutdown()
         await self.mission_group.cleanup_connector_missions()
         await self.mission_group.stop()
         await self.robot.stop()
         await self.mir_api.close()
+        try:
+            await self.mission_executor.shutdown()
+            self._logger.info("Mission executor shut down successfully")
+        except Exception as e:
+            self._logger.error(f"Error shutting down mission executor: {e}")
 
     async def _execution_loop(self) -> None:
         status = self.robot.status
@@ -145,8 +149,11 @@ class MirConnector(Connector):
         if map_id and self.mission_executor._worker_pool:
             self.mission_executor._worker_pool.set_native_map_id(map_id)
 
-        # Re-enable native mission tracking when edge executor has no active missions
-        if self.mission_executor._worker_pool and not self.mission_executor._worker_pool._workers:
+        # Check if the InOrbit edge executor is idle
+        executor_idle = self._get_session().missions_module.executor.wait_until_idle(0)
+
+        # Re-enable native mission tracking when edge executor is idle
+        if executor_idle:
             self.mission_tracking.mir_mission_tracking_enabled = True
 
         # Pose (degrees -> radians)
@@ -163,6 +170,18 @@ class MirConnector(Connector):
             angular_speed=math.radians(self.status.get("velocity", {}).get("angular", 0)),
         )
 
+        # Override mission/state/mode text when edge executor is active so the
+        # InOrbit UI shows consistent "Executing" instead of flickering between
+        # MiR-native states during multi-waypoint compiled missions.
+        if executor_idle:
+            mode_text = self.status.get("mode_text")
+            state_text = self.status.get("state_text")
+            mission_text = self.status.get("mission_text")
+        else:
+            mode_text = "Mission"
+            state_text = "Executing"
+            mission_text = "Mission"
+
         # Key values
         key_values = {
             "connector_version": connector_version,
@@ -170,15 +189,16 @@ class MirConnector(Connector):
             "serial_number": self.status.get("serial_number"),
             "errors": self.status.get("errors"),
             "distance_to_next_target": self.status.get("distance_to_next_target"),
-            "mission_text": self.status.get("mission_text"),
-            "state_text": self.status.get("state_text"),
+            "mission_text": mission_text,
+            "state_text": state_text,
             "state_id": self.status.get("state_id"),
-            "mode_text": self.status.get("mode_text"),
+            "mode_text": mode_text,
             "mode_id": self.status.get("mode_id"),
             "robot_model": self.status.get("robot_model"),
             "moved": self.status.get("moved"),
             "safety_system_muted": self.status.get("safety_system_muted"),
             "uptime": self.status.get("uptime"),
+            "waiting_for": self.mission_tracking.waiting_for_text,
             "api_connected": self.robot.api_connected,
         }
 
@@ -346,13 +366,20 @@ class MirConnector(Connector):
             return
 
         if script_name == "queue_mission" and "--mission_id" in script_args:
+            self.mission_tracking.mir_mission_tracking_enabled = (
+                self._get_session().missions_module.executor.wait_until_idle(0)
+            )
             await self.mir_api.queue_mission(script_args["--mission_id"])
 
         elif script_name == "run_mission_now" and "--mission_id" in script_args:
+            self.mission_tracking.mir_mission_tracking_enabled = (
+                self._get_session().missions_module.executor.wait_until_idle(0)
+            )
             await self.mir_api.abort_all_missions()
             await self.mir_api.queue_mission(script_args["--mission_id"])
 
         elif script_name == "abort_missions":
+            self._get_session().missions_module.executor.cancel_mission("*")
             await self.mir_api.abort_all_missions()
 
         elif script_name == "set_state" and "--state_id" in script_args:
@@ -367,6 +394,10 @@ class MirConnector(Connector):
 
         elif script_name == "set_state" and "--clear_error" in script_args:
             await self.mir_api.clear_error()
+
+        elif script_name == "set_waiting_for" and "--text" in script_args:
+            self._logger.info(f"Setting 'waiting for' value to {script_args['--text']}")
+            self.mission_tracking.waiting_for_text = script_args["--text"]
 
         elif script_name == "localize":
             if all(k in script_args for k in ["--x", "--y", "--orientation", "--map_id"]):
