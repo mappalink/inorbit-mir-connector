@@ -31,6 +31,9 @@ class MirMissionTracking:
         # Disabled while an InOrbit edge-executor mission is running
         self.mir_mission_tracking_enabled = True
 
+        # Custom text for waitUntil expressions, set via set_waiting_for command
+        self.waiting_for_text = ""
+
         self.executing_mission_id = None
         self.last_reported_mission_id = None
         self.last_reported_mission_progress = 0.0
@@ -95,6 +98,7 @@ class MirMissionTracking:
                 "Uptime (s)": status.get("uptime", "N/A"),
                 "Serial Number": status.get("serial_number", "N/A"),
                 "Battery Time Remaining (s)": status.get("battery_time_remaining", "N/A"),
+                "WiFi RSSI (dbm)": metrics.get("mir_robot_wifi_access_point_rssi_dbm", "N/A"),
             },
         }
 
