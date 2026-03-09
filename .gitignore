@@ -33,6 +33,10 @@ docker/docker-compose.yaml
 *.key
 *.csr
 
+# Claude Code
+CLAUDE.md
+.claude/
+
 # IDE
 .vscode/
 .idea/
