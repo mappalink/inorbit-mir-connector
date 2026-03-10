@@ -12,7 +12,7 @@ InOrbit Edge connector for MiR
 
 ## Overview
 
-This repository contains the [InOrbit](https://inorbit.ai/) Edge Connector for [MiR](https://example.com).
+This repository contains the [InOrbit](https://inorbit.ai/) Edge Connector for [MiR](https://www.mobile-industrial-robots.com/) robots. It runs one process per robot and supports multi-robot fleet management through a single fleet configuration file.
 
 This integration requires the Connector to be configured following the instructions below.
 
@@ -20,7 +20,7 @@ This integration requires the Connector to be configured following the instructi
 
 This connector implementation is based on the official publicly available MiR API specifications available on the MiR support portal. For detailed API documentation and reference materials, please refer to:
 
-- [REST API Documentation](https://example.com) (requires a free account login)
+- [REST API Documentation](https://www.mobile-industrial-robots.com/support/) (requires a free account login)
 
 ## Features
 
@@ -58,7 +58,7 @@ uv pip install colorlog
 
 - Copy `config/fleet.example.yaml` to `config/my_fleet.yaml` and configure your robot fleet. Each robot needs an InOrbit `robot_id` and the corresponding MiR `fleet_robot_id`.
 
-- Optionally, configure the MiR connector-specific settings via environment variables. Copy `config/example.env` to `config/.env` and fill in the values. Any `connector_config` fields can be set using the `INORBIT_MIR_` prefix (e.g., `INORBIT_MIR_FLEET_HOST`, `INORBIT_MIR_FLEET_USERNAME`). Environment variables are used as fallbacks when fields are missing from the YAML configuration. See `config/example.env` for reference. The `.env` file will be automatically loaded when the connector is run.
+- Optionally, configure the MiR connector-specific settings via environment variables. Copy `config/example.env` to `config/.env` and fill in the values. Any `connector_config` fields can be set using the `INORBIT_MIR_` prefix (e.g., `INORBIT_MIR_FLEET_HOST`, `INORBIT_MIR_FLEET_USERNAME`). Environment variables are used as fallbacks when fields are missing from the YAML configuration. See `config/example.env` for reference.
 
 - Set the `INORBIT_API_KEY` environment variable. You can get the API key for your account from InOrbit's [Developer Console](https://developer.inorbit.ai/docs#configuring-environment-variables).
 
@@ -72,7 +72,13 @@ export INORBIT_API_KEY=your-api-key-here
 Once all dependencies are installed and the configuration is complete, the Connector can be run as a command.
 
 ```bash
-source config/.env && mir-connector -c config/my_fleet.yaml
+source config/.env && mir-connector -c config/my_fleet.yaml -id my_robot
+```
+
+You can validate your fleet config without starting the connector:
+
+```bash
+mir-connector -c config/my_fleet.yaml --validate
 ```
 
 ### Docker
@@ -99,7 +105,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 ## Support
 
 - **Documentation**: [InOrbit Developer Docs](https://developer.inorbit.ai/)
-- **Issues**: [GitHub Issues](https://github.com/mappalink/mir-connector/issues)
+- **Issues**: [GitHub Issues](https://github.com/mappalink/inorbit-mir-connector/issues)
 - **Email**: info@mappalink.com
 
 ---
