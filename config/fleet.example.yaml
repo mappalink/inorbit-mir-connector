@@ -18,13 +18,13 @@ common:
   mir_firmware_version: "v2"
   mir_use_ssl: false
 
-mir200-1:
+robot-1:
   robot_name: "MiR200-1"
   mir_host_address: "192.168.1.10"
   # Override connector_type if different from common
   # connector_type: MiR200
 
-mir500-1:
+robot-2:
   robot_name: "MiR500-1"
   mir_host_address: "192.168.1.11"
   connector_type: MiR500
