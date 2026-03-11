@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 version = 1
-SPDX-PackageName = "mir-connector"
-SPDX-PackageSupplier = "https://github.com/mappalink/mir-connector"
+SPDX-PackageName = "inorbit-mir-connector"
+SPDX-PackageSupplier = "https://github.com/mappalink/inorbit-mir-connector"
 
 # Configuration files that don't require copyright/license headers in the file itself
 # These are annotated here with MIT (same as the rest of the project)
@@ -35,7 +35,3 @@ path = "config/fleet.example.yaml"
 SPDX-FileCopyrightText = "2026 Mappalink"
 SPDX-License-Identifier = "MIT"
 
-[[annotations]]
-path = "docker-compose.yaml"
-SPDX-FileCopyrightText = "2026 Mappalink"
-SPDX-License-Identifier = "MIT"

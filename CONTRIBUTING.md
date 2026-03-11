@@ -13,20 +13,20 @@ Contributions are encouraged, and they are greatly appreciated! Every little bit
 
 ## Get Started
 
-Ready to contribute? Here's how to set up `mir-connector` for local development.
+Ready to contribute? Here's how to set up `inorbit-mir-connector` for local development.
 
-1. Fork the `mir-connector` repo on [GitHub](https://github.com/mappalink/mir-connector).
+1. Fork the `inorbit-mir-connector` repo on [GitHub](https://github.com/mappalink/inorbit-mir-connector).
 
 2. Clone your fork locally:
 
    ```bash
-   git clone git@github.com:{your_username_here}/mir-connector.git
+   git clone git@github.com:{your_username_here}/inorbit-mir-connector.git
    ```
 
 3. Install the project in editable mode using [`uv`](https://github.com/astral-sh/uv):
 
    ```bash
-   cd mir-connector
+   cd inorbit-mir-connector
    uv sync --extra dev
    ```
 
@@ -60,7 +60,7 @@ Ready to contribute? Here's how to set up `mir-connector` for local development.
    git push origin {your_development_type}/short-description
    ```
 
-7. Submit a pull request through the [GitHub](https://github.com/mappalink/mir-connector/pulls) website.
+7. Submit a pull request through the [GitHub](https://github.com/mappalink/inorbit-mir-connector/pulls) website.
 
 ## Development
 
@@ -105,12 +105,13 @@ To release a new version:
    make bump DIRTY=1 PART=patch
    ```
 
-3. Push the commit and the tag:
+3. Push the commit:
 
    ```bash
    git push
-   git push --tags
    ```
+
+   CI will create the git tag and GitHub release after checks pass.
 
 > [!IMPORTANT]
 > The message of the last commit must match the configured pattern, e.g. "Bump mir-connector version: 0.1.0 → 0.1.1", for the publish job to run.

@@ -7,9 +7,7 @@
 # This script builds the Docker image for the MiR Connector.
 # The image is tagged with the current version of the connector.
 
-# (maintainers only) the image is pushed to the Google Cloud Registry if the --push flag is provided.
-# Remember to first run `gcloud auth configure-docker us-central1-docker.pkg.dev` to authenticate
-# with the Google Cloud Registry.
+# (maintainers only) the image is pushed to GHCR if the --push flag is provided.
 
 # Please note that for release purposes GitHub workflows will build and push the image automatically
 # on version bumps.
@@ -19,7 +17,7 @@ set -e
 
 REPO_ROOT_DIR="$(dirname "$0")/.."
 
-IMAGE_NAME="us-central1-docker.pkg.dev/inorbit-integrations/connectors/mir_connector"
+IMAGE_NAME="ghcr.io/mappalink/inorbit-mir-connector"
 IMAGE_NAME_SHORT="mir_connector"
 
 echo "Building Docker image '$IMAGE_NAME'..."
