@@ -26,11 +26,7 @@ from mir_connector.src.mir_api import MirApi, SetStateId
 from mir_connector.src.mir_api.missions_group import MirMissionsGroupHandler
 from mir_connector.src.mission.behavior_tree import MirBehaviorTreeBuilderContext
 from mir_connector.src.mission.datatypes import MirInOrbitMission
-from mir_connector.src.mission.translator import (
-    InOrbitToMirTranslator,
-    SpatialTransform,
-    fetch_spatial_transform,
-)
+from mir_connector.src.mission.translator import InOrbitToMirTranslator
 from mir_connector.src.mission.tree_builder import MirTreeBuilder
 
 
@@ -138,7 +134,6 @@ class MirWorkerPool(WorkerPool):
         super().__init__(behavior_tree_builder=MirTreeBuilder(), *args, **kwargs)
         self.logger = logging.getLogger(name=self.__class__.__name__)
         self._native_map_id = ""
-        self._prefetched_transform: Optional[SpatialTransform] = None
 
     def set_native_map_id(self, map_id: str):
         self._native_map_id = map_id
@@ -167,29 +162,10 @@ class MirWorkerPool(WorkerPool):
 
     def translate_mission(self, mission: Mission) -> MirInOrbitMission:
         self.logger.debug(f"Translating mission {mission.id}")
-        return InOrbitToMirTranslator.translate(
-            mission=mission,
-            spatial_transform=self._prefetched_transform,
-        )
+        return InOrbitToMirTranslator.translate(mission=mission)
 
     def deserialize_mission(self, serialized_mission: dict) -> MirInOrbitMission:
         return MirInOrbitMission.model_validate(serialized_mission)
-
-    async def submit_work(self, mission, options, shared_memory=None):
-        self._prefetched_transform = await self._maybe_fetch_transform(mission)
-        try:
-            return await super().submit_work(mission, options, shared_memory)
-        finally:
-            self._prefetched_transform = None
-
-    async def _maybe_fetch_transform(self, mission: Mission) -> Optional[SpatialTransform]:
-        has_map_frame = any(
-            hasattr(step, "waypoint") and getattr(step.waypoint, "frame_id", None) == "map"
-            for step in mission.definition.steps
-        )
-        if not has_map_frame or not self._native_map_id:
-            return None
-        return await fetch_spatial_transform(self._api, mission.robot_id, self._native_map_id)
 
     async def pause_mission(self, mission_id):
         import asyncio
