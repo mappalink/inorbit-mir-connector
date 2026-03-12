@@ -7,10 +7,10 @@ name: MiR Connector Workflow
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   lint-and-test:
