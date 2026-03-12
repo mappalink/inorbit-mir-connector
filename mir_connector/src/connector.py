@@ -112,6 +112,7 @@ class MirConnector(Connector):
             missions_group=self.mission_group,
             firmware_version=config.connector_config.mir_firmware_version,
             connector_type=config.connector_type,
+            account_id=config.account_id or "",
         )
 
         # Initialize status as None to prevent publishing before the robot is connected
