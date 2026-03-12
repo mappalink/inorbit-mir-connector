@@ -129,14 +129,12 @@ class MirWorkerPool(WorkerPool):
         missions_group: Optional[MirMissionsGroupHandler] = None,
         firmware_version: str = "v3",
         connector_type: str = "",
-        account_id: str = "",
         **kwargs,
     ):
         self.mir_api = mir_api
         self._missions_group = missions_group
         self._firmware_version = firmware_version
         self._connector_type = connector_type
-        self._account_id = account_id
         super().__init__(behavior_tree_builder=MirTreeBuilder(), *args, **kwargs)
         self.logger = logging.getLogger(name=self.__class__.__name__)
         self._native_map_id = ""
@@ -191,9 +189,7 @@ class MirWorkerPool(WorkerPool):
         )
         if not has_map_frame or not self._native_map_id:
             return None
-        return await fetch_spatial_transform(
-            self._api, mission.robot_id, self._native_map_id, self._account_id
-        )
+        return await fetch_spatial_transform(self._api, mission.robot_id, self._native_map_id)
 
     async def pause_mission(self, mission_id):
         import asyncio
@@ -231,7 +227,6 @@ class MirMissionExecutor:
         missions_group: Optional[MirMissionsGroupHandler] = None,
         firmware_version: str = "v3",
         connector_type: str = "",
-        account_id: str = "",
     ):
         self.logger = logging.getLogger(name=self.__class__.__name__)
         self.robot_id = robot_id
@@ -240,7 +235,6 @@ class MirMissionExecutor:
         self._missions_group = missions_group
         self._firmware_version = firmware_version
         self._connector_type = connector_type
-        self._account_id = account_id
         if database_file:
             self.database_file = "dummy" if database_file == "dummy" else f"sqlite:{database_file}"
         else:
@@ -258,7 +252,6 @@ class MirMissionExecutor:
                 missions_group=self._missions_group,
                 firmware_version=self._firmware_version,
                 connector_type=self._connector_type,
-                account_id=self._account_id,
             )
             await self._worker_pool.start()
             self._initialized = True

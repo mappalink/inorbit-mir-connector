@@ -86,51 +86,26 @@ async def fetch_spatial_transform(
     api: InOrbitAPI,
     robot_id: str,
     native_map_id: str,
-    account_id: str = "",
 ) -> Optional[SpatialTransform]:
-    """Fetch and cache the SpatialTransformation from InOrbit.
-
-    Uses /configuration/list to find the transform for the robot's native frame.
-    Prefers an entry whose id matches native_map_id, falls back to any entry
-    with a valid transformation matrix.
-    """
+    """Fetch and cache the SpatialTransformation from InOrbit."""
     cache_key = (robot_id, native_map_id)
     if cache_key in _transform_cache:
         return _transform_cache[cache_key]
 
     try:
-        scope = f"robot/{account_id}/{robot_id}" if account_id else ""
-        query = "configuration/list?kind=SpatialTransformation&format=full"
-        if scope:
-            query += f"&scope={scope}"
-        response = await api.get(query)
+        response = await api.get(
+            f"robots/{robot_id}/config?kind=SpatialTransformation&id={native_map_id}"
+        )
         data = response.json()
-        items = data.get("items", [])
-
-        best_matrix = None
-        for item in items:
-            spec = item.get("spec")
-            if not spec:
-                continue
-            matrix = spec.get("transformation")
-            if not matrix:
-                continue
-            item_id = item.get("metadata", {}).get("id", "")
-            # Prefer exact match on native_map_id
-            if item_id == native_map_id:
-                best_matrix = matrix
-                break
-            if best_matrix is None:
-                best_matrix = matrix
-
-        if not best_matrix:
+        matrix = data.get("spec", data).get("transformation")
+        if not matrix:
             logger.warning(
                 "No SpatialTransformation found for robot=%s frame=%s",
                 robot_id,
                 native_map_id,
             )
             return None
-        transform = SpatialTransform(best_matrix)
+        transform = SpatialTransform(matrix)
         _transform_cache[cache_key] = transform
         logger.info("Cached SpatialTransform for robot=%s frame=%s", robot_id, native_map_id)
         return transform
