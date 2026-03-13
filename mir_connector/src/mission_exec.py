@@ -10,15 +10,12 @@ and executing them with pause/resume/abort support.
 
 import json
 import logging
-import math
-import re
 from enum import Enum
 from typing import Optional
 
 from inorbit_connector.connector import CommandResultCode
-from inorbit_edge_executor.datatypes import MissionRuntimeOptions, Robot
+from inorbit_edge_executor.datatypes import MissionRuntimeOptions
 from inorbit_edge_executor.db import get_db
-from inorbit_edge_executor.inorbit import RobotApi, RobotApiFactory
 from inorbit_edge_executor.mission import Mission
 from inorbit_edge_executor.worker_pool import WorkerPool
 
@@ -34,87 +31,6 @@ class MissionScriptName(Enum):
     EXECUTE_MISSION_ACTION = "executeMissionAction"
     CANCEL_MISSION_ACTION = "cancelMissionAction"
     UPDATE_MISSION_ACTION = "updateMissionAction"
-
-
-# ---------------------------------------------------------------------------
-# Local pose evaluation for native-frame waypoint WaitExpressions
-# ---------------------------------------------------------------------------
-
-_POSE_EXPR_RE = re.compile(
-    r"pose\s*=\s*getValue\('pose'\).*"
-    r"pose\.frameId\s*==\s*'(?P<frame_id>[^']+)'"
-    r".*sqrt\(pow\(pose\.x-(?P<tx>[\d.e+-]+),\s*2\)\s*\+\s*pow\(pose\.y-(?P<ty>[\d.e+-]+),\s*2\)\)"
-    r"\s*<\s*(?P<dist_tol>[\d.e+-]+)"
-    r".*angularDistance\(theta,\s*(?P<ttheta>[\d.e+-]+)\)\)"
-    r"\s*<\s*(?P<ang_tol>[\d.e+-]+)"
-)
-
-
-def _angular_distance(a: float, b: float) -> float:
-    d = (a - b) % (2 * math.pi)
-    if d > math.pi:
-        d -= 2 * math.pi
-    return abs(d)
-
-
-class MirRobotApi(RobotApi):
-    """Evaluates pose-waypoint expressions locally when they reference
-    the connector's native map frame."""
-
-    def __init__(self, robot, api, *, mir_api: MirApi, native_map_id: str):
-        super().__init__(robot, api)
-        self._mir_api = mir_api
-        self._native_map_id = native_map_id
-        self._logger = logging.getLogger(self.__class__.__name__)
-
-    async def evaluate_expression(self, expression: str):
-        m = _POSE_EXPR_RE.search(expression)
-        if not m or m.group("frame_id") != self._native_map_id:
-            return await super().evaluate_expression(expression)
-
-        try:
-            status = await self._mir_api.get_status()
-            pos = status.get("position", {})
-            px = pos.get("x", 0.0)
-            py = pos.get("y", 0.0)
-            ptheta = math.radians(pos.get("orientation", 0.0))
-            p_map_id = status.get("map_id", "")
-        except Exception as e:
-            self._logger.warning(f"Local pose eval failed, falling back to server: {e}")
-            return await super().evaluate_expression(expression)
-
-        tx = float(m.group("tx"))
-        ty = float(m.group("ty"))
-        ttheta = float(m.group("ttheta"))
-        dist_tol = float(m.group("dist_tol"))
-        ang_tol = float(m.group("ang_tol"))
-
-        frame_ok = p_map_id == self._native_map_id
-        dist = math.sqrt((px - tx) ** 2 + (py - ty) ** 2)
-        ang = _angular_distance(ptheta, ttheta)
-
-        result = frame_ok and dist < dist_tol and ang < ang_tol
-        self._logger.debug(
-            f"Local pose eval: frame={p_map_id}=={self._native_map_id}:{frame_ok} "
-            f"dist={dist:.3f}<{dist_tol}:{dist < dist_tol} "
-            f"ang={ang:.3f}<{ang_tol}:{ang < ang_tol} -> {result}"
-        )
-        return result
-
-
-class MirRobotApiFactory(RobotApiFactory):
-    def __init__(self, api, *, mir_api: MirApi, native_map_id: str):
-        super().__init__(api)
-        self._mir_api = mir_api
-        self._native_map_id = native_map_id
-
-    def build(self, robot_id: str):
-        return MirRobotApi(
-            Robot(id=robot_id),
-            self._api,
-            mir_api=self._mir_api,
-            native_map_id=self._native_map_id,
-        )
 
 
 class MirWorkerPool(WorkerPool):
@@ -133,10 +49,6 @@ class MirWorkerPool(WorkerPool):
         self._connector_type = connector_type
         super().__init__(behavior_tree_builder=MirTreeBuilder(), *args, **kwargs)
         self.logger = logging.getLogger(name=self.__class__.__name__)
-        self._native_map_id = ""
-
-    def set_native_map_id(self, map_id: str):
-        self._native_map_id = map_id
 
     def create_builder_context(self) -> MirBehaviorTreeBuilderContext:
         missions_group_id = None
@@ -148,17 +60,6 @@ class MirWorkerPool(WorkerPool):
             firmware_version=self._firmware_version,
             connector_type=self._connector_type,
         )
-
-    def prepare_builder_context(self, context, mission):
-        super().prepare_builder_context(context, mission)
-        if self._native_map_id:
-            factory = MirRobotApiFactory(
-                self._api,
-                mir_api=self.mir_api,
-                native_map_id=self._native_map_id,
-            )
-            context.robot_api_factory = factory
-            context.robot_api = factory.build(mission.robot_id)
 
     def translate_mission(self, mission: Mission) -> MirInOrbitMission:
         self.logger.debug(f"Translating mission {mission.id}")

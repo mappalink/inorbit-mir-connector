@@ -144,11 +144,6 @@ class MirConnector(Connector):
         self.metrics = self.robot.metrics
         self.diagnostics = self.robot.diagnostics
 
-        # Feed native map ID to the mission executor's worker pool
-        map_id = self.status.get("map_id", "")
-        if map_id and self.mission_executor._worker_pool:
-            self.mission_executor._worker_pool.set_native_map_id(map_id)
-
         # Check if the InOrbit edge executor is idle
         executor_idle = self._get_session().missions_module.executor.wait_until_idle(0)
 
