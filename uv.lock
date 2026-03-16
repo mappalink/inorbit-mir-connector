@@ -457,7 +457,7 @@ wheels = [
 
 [[package]]
 name = "mir-connector"
-version = "0.1.11"
+version = "0.1.12"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
