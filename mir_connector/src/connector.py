@@ -360,7 +360,13 @@ class MirConnector(Connector):
             self.mission_tracking.mir_mission_tracking_enabled = False
             return
 
-        if script_name == "queue_mission" and "--mission_id" in script_args:
+        if script_name == "pauseRobot":
+            await self.mir_api.set_state(SetStateId.PAUSE.value)
+
+        elif script_name == "resumeRobot":
+            await self.mir_api.set_state(SetStateId.READY.value)
+
+        elif script_name == "queue_mission" and "--mission_id" in script_args:
             self.mission_tracking.mir_mission_tracking_enabled = (
                 self._get_session().missions_module.executor.wait_until_idle(0)
             )
