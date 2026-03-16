@@ -48,6 +48,7 @@ _STATE_ABORT = "Abort"
 
 class SharedMemoryKeys(StrEnum):
     MIR_MISSION_GUID = "mir_mission_guid"
+    MIR_QUEUE_ID = "mir_queue_id"
     MIR_ERROR_MESSAGE = "mir_error_message"
 
 
@@ -102,6 +103,7 @@ class CreateMirNativeMissionNode(BehaviorTree):
         self._step = step
 
         self._shared_memory.add(SharedMemoryKeys.MIR_MISSION_GUID, None)
+        self._shared_memory.add(SharedMemoryKeys.MIR_QUEUE_ID, None)
         self._shared_memory.add(SharedMemoryKeys.MIR_ERROR_MESSAGE, None)
 
     async def _execute(self):
@@ -149,9 +151,11 @@ class CreateMirNativeMissionNode(BehaviorTree):
                     priority=i + 1,
                 )
 
-            await self._mir_api.queue_mission(mission_guid)
+            queue_response = await self._mir_api.queue_mission(mission_guid)
+            queue_id = queue_response.get("id")
             self._shared_memory.set(SharedMemoryKeys.MIR_MISSION_GUID, mission_guid)
-            logger.info(f"Queued MiR native mission: {mission_guid}")
+            self._shared_memory.set(SharedMemoryKeys.MIR_QUEUE_ID, queue_id)
+            logger.info(f"Queued MiR native mission: {mission_guid} (queue id: {queue_id})")
 
         except Exception as e:
             error_msg = f"Failed to create/queue MiR native mission: {e}"
@@ -181,49 +185,42 @@ class WaitForMirMissionCompletionNode(BehaviorTree):
         self._timeout_secs = timeout_secs
 
     async def _execute(self):
+        queue_id = self._shared_memory.get(SharedMemoryKeys.MIR_QUEUE_ID)
         mission_guid = self._shared_memory.get(SharedMemoryKeys.MIR_MISSION_GUID)
-        if not mission_guid:
-            raise RuntimeError("No MiR mission GUID in shared memory")
+        if not queue_id:
+            raise RuntimeError("No MiR queue ID in shared memory")
 
-        logger.info(f"Waiting for MiR mission {mission_guid} to complete")
+        logger.info(
+            f"Waiting for MiR mission queue entry {queue_id} (mission {mission_guid}) to complete"
+        )
         start_time = time.time()
 
         while True:
             if self._timeout_secs and (time.time() - start_time) > self._timeout_secs:
-                raise RuntimeError(
-                    f"MiR mission {mission_guid} timed out after {self._timeout_secs}s"
-                )
+                raise RuntimeError(f"MiR mission {queue_id} timed out after {self._timeout_secs}s")
 
             try:
-                queue = await self._mir_api.get_missions_queue()
+                entry = await self._mir_api.get_mission_queue_entry(queue_id)
             except Exception as e:
-                logger.warning(f"Failed to poll mission queue: {e}")
+                logger.warning(f"Failed to poll mission queue entry {queue_id}: {e}")
                 await asyncio.sleep(_POLL_INTERVAL_SECS)
                 continue
 
-            our_entry = None
-            for entry in queue:
-                if entry.get("mission_id") == mission_guid:
-                    our_entry = entry
-                    break
-
-            if our_entry is None:
-                logger.info(f"MiR mission {mission_guid} no longer in queue — assuming done")
-                return
-
-            state = our_entry.get("state", "")
+            state = entry.get("state", "")
 
             if state == _STATE_DONE:
-                logger.info(f"MiR mission {mission_guid} completed successfully")
+                logger.info(f"MiR mission {queue_id} completed successfully")
                 return
 
             if state == _STATE_ABORT:
-                error_msg = f"MiR mission {mission_guid} was aborted"
+                error_msg = (
+                    f"MiR mission {queue_id} was aborted: {entry.get('message', 'no message')}"
+                )
                 logger.error(error_msg)
                 self._shared_memory.set(SharedMemoryKeys.MIR_ERROR_MESSAGE, error_msg)
                 raise RuntimeError(error_msg)
 
-            logger.debug(f"MiR mission {mission_guid} state: {state}")
+            logger.debug(f"MiR mission {queue_id} state: {state}")
             await asyncio.sleep(_POLL_INTERVAL_SECS)
 
     @classmethod

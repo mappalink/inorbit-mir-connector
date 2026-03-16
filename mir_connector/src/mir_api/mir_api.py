@@ -179,7 +179,7 @@ class MirApi:
         parameters: Optional[list] = None,
         priority: int = 0,
         description: Optional[str] = None,
-    ):
+    ) -> dict:
         body = {"mission_id": mission_id}
         if message:
             body["message"] = message
@@ -189,13 +189,20 @@ class MirApi:
             body["priority"] = priority
         if description:
             body["description"] = description
-        await self._post("/mission_queue", headers={"Content-Type": "application/json"}, json=body)
+        resp = await self._post(
+            "/mission_queue", headers={"Content-Type": "application/json"}, json=body
+        )
+        return resp.json()
 
     async def abort_all_missions(self):
         await self._delete("/mission_queue", headers={"Content-Type": "application/json"})
 
     async def get_missions_queue(self) -> list:
         return (await self._get("/mission_queue")).json()
+
+    async def get_mission_queue_entry(self, queue_id: int) -> dict:
+        """Return full details of a single mission queue entry."""
+        return (await self._get(f"/mission_queue/{queue_id}")).json()
 
     async def get_executing_mission_id(self):
         """Return the queue ID of the currently executing mission, or None."""
