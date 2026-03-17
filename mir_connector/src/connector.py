@@ -147,9 +147,12 @@ class MirConnector(Connector):
         # Check if the InOrbit edge executor is idle
         executor_idle = self._get_session().missions_module.executor.wait_until_idle(0)
 
-        # Re-enable native mission tracking when edge executor is idle
+        # Re-enable native mission tracking only when both the edge executor
+        # AND the MiR robot are idle. This prevents native tracking from picking
+        # up the just-completed compiled MiR mission as a separate entry.
         if executor_idle:
-            self.mission_tracking.mir_mission_tracking_enabled = True
+            mir_idle = self.status.get("state_id") == 3  # Ready
+            self.mission_tracking.mir_mission_tracking_enabled = mir_idle
 
         # Pose (degrees -> radians)
         self.publish_pose(
