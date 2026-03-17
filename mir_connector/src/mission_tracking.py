@@ -45,10 +45,11 @@ class MirMissionTracking:
         self.last_reported_mission_id = None
         self.last_reported_mission_progress = 0.0
 
-    def add_managed_queue_id(self, queue_id: int):
+    def add_managed_queue_id(self, queue_id):
         """Register a MiR queue entry as managed by InOrbit (skip in native tracking)."""
-        self._managed_queue_ids.add(queue_id)
-        self.logger.debug(f"Registered InOrbit-managed queue entry: {queue_id}")
+        if queue_id is not None:
+            self._managed_queue_ids.add(queue_id)
+            self.logger.info(f"Registered InOrbit-managed queue entry: {queue_id}")
 
     def clear_managed_queue_ids(self):
         """Clear managed queue IDs. Called when MiR returns to idle."""
@@ -90,6 +91,10 @@ class MirMissionTracking:
 
         # Skip missions created by the connector on behalf of InOrbit
         if mission["id"] in self._managed_queue_ids:
+            self.logger.debug(
+                f"Skipping managed mission queue entry {mission['id']} "
+                f"(managed: {self._managed_queue_ids})"
+            )
             return
 
         completed_percent = len(mission["actions"]) / len(mission["definition"]["actions"])
