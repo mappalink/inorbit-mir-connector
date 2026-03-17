@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from inorbit_edge_executor.behavior_tree import (
     BehaviorTree,
     BehaviorTreeErrorHandler,
@@ -16,13 +18,27 @@ from inorbit_edge_executor.behavior_tree import (
     MissionPausedNode,
 )
 from inorbit_edge_executor.inorbit import MissionStatus
-
 from mir_connector.src.mission.behavior_tree import (
     CleanupMirMissionNode,
     MirBehaviorTreeBuilderContext,
     MirMissionAbortedNode,
     MirNodeFromStepBuilder,
 )
+
+logger = logging.getLogger(__name__)
+
+
+class LoggingMissionCompletedNode(MissionCompletedNode):
+    """MissionCompletedNode with debug logging around mt.completed()."""
+
+    async def _execute(self):
+        logger.info(f"MissionCompletedNode: calling mt.completed() for mission {self.mt.id}")
+        try:
+            result = await self.mt.completed()
+            logger.info(f"MissionCompletedNode: mt.completed() returned {result}")
+        except Exception as e:
+            logger.error(f"MissionCompletedNode: mt.completed() raised {e}")
+            raise
 
 
 class MirTreeBuilder(DefaultTreeBuilder):
@@ -47,7 +63,7 @@ class MirTreeBuilder(DefaultTreeBuilder):
             if node:
                 tree.add_node(node)
 
-        tree.add_node(MissionCompletedNode(context, label="mission completed"))
+        tree.add_node(LoggingMissionCompletedNode(context, label="mission completed"))
 
         # Error handling
         on_error = BehaviorTreeSequential(label="error handlers")
