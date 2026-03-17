@@ -30,7 +30,11 @@ from inorbit_edge_executor.behavior_tree import (
 )
 from inorbit_edge_executor.inorbit import MissionStatus
 
-from mir_connector.src.mission.datatypes import MissionStepExecuteMirNativeMission
+from mir_connector.src.mission.datatypes import (
+    MirAction,
+    MirWaypoint,
+    MissionStepExecuteMirNativeMission,
+)
 from mir_connector.src.mir_api import MirApi
 
 logger = logging.getLogger(__name__)
@@ -107,11 +111,11 @@ class CreateMirNativeMissionNode(BehaviorTree):
         self._shared_memory.add(SharedMemoryKeys.MIR_ERROR_MESSAGE, None)
 
     async def _execute(self):
-        waypoints = self._step.waypoints
-        n = len(waypoints)
+        actions = self._step.actions
+        n = len(actions)
         mission_guid = str(uuid.uuid4())
 
-        logger.info(f"Creating MiR native mission with {n} waypoints: {mission_guid}")
+        logger.info(f"Creating MiR native mission with {n} actions: {mission_guid}")
 
         if not self._missions_group_id:
             error_msg = "No missions group available for creating native MiR mission"
@@ -122,22 +126,29 @@ class CreateMirNativeMissionNode(BehaviorTree):
         try:
             await self._mir_api.create_mission(
                 group_id=self._missions_group_id,
-                name=f"InOrbit Mission ({n} waypoints)",
+                name=f"InOrbit Mission ({n} actions)",
                 guid=mission_guid,
                 description="Compiled mission created by InOrbit edge executor",
             )
 
-            for i, wp in enumerate(waypoints):
-                param_values = {
-                    "x": wp.x,
-                    "y": wp.y,
-                    "orientation": wp.orientation,
-                    "distance_threshold": _MIR_MOVE_DISTANCE_THRESHOLD,
-                }
-                if self._firmware_version == "v2":
-                    param_values["retries"] = 5
+            for i, action in enumerate(actions):
+                if isinstance(action, MirWaypoint):
+                    action_type = "move_to_position"
+                    param_values = {
+                        "x": action.x,
+                        "y": action.y,
+                        "orientation": action.orientation,
+                        "distance_threshold": _MIR_MOVE_DISTANCE_THRESHOLD,
+                    }
+                    if self._firmware_version == "v2":
+                        param_values["retries"] = 5
+                    else:
+                        param_values["blocked_path_timeout"] = 60.0
+                elif isinstance(action, MirAction):
+                    action_type = action.action_type
+                    param_values = dict(action.parameters)
                 else:
-                    param_values["blocked_path_timeout"] = 60.0
+                    raise TypeError(f"Unexpected action type: {type(action)}")
 
                 action_parameters = [
                     {"value": v, "input_name": None, "guid": str(uuid.uuid4()), "id": k}
@@ -145,7 +156,7 @@ class CreateMirNativeMissionNode(BehaviorTree):
                 ]
 
                 await self._mir_api.add_action_to_mission(
-                    action_type="move_to_position",
+                    action_type=action_type,
                     mission_id=mission_guid,
                     parameters=action_parameters,
                     priority=i + 1,

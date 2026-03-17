@@ -10,9 +10,9 @@ waypoint steps are compiled into a single native MiR mission.
 
 from __future__ import annotations
 
-from typing import List, Union
+from typing import Any, List, Union
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from inorbit_edge_executor.datatypes import (
     MissionDefinition,
@@ -38,16 +38,33 @@ class MirWaypoint(MissionStep):
     orientation: float = Field(description="Orientation in degrees (MiR convention)")
 
 
+class MirAction(MissionStep):
+    """Generic MiR action with pass-through parameters."""
+
+    action_type: str = Field(description="MiR action type (e.g. 'docking', 'charging', 'wait')")
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
 class MissionStepExecuteMirNativeMission(MissionStep):
     """Custom step that executes a compiled native MiR mission.
 
-    Produced by the translator when consecutive waypoint steps are grouped.
-    The behavior tree node creates a MiR mission definition, adds one
-    ``move_to_position`` action per waypoint, and queues it.
+    Produced by the translator when consecutive waypoint/action steps are
+    grouped. The behavior tree node creates a MiR mission definition, adds
+    one action per entry, and queues it.
     """
 
-    waypoints: List[MirWaypoint] = Field(description="Ordered waypoints for native MiR mission")
+    actions: List[Union[MirWaypoint, MirAction]] = Field(
+        description="Ordered actions for native MiR mission"
+    )
     robot_id: str = Field(description="InOrbit robot ID")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_waypoints(cls, data):
+        """Backward-compat: accept serialized missions that still use 'waypoints'."""
+        if isinstance(data, dict) and "waypoints" in data and "actions" not in data:
+            data["actions"] = data.pop("waypoints")
+        return data
 
     def accept(self, visitor):
         if hasattr(visitor, "visit_execute_mir_native_mission"):
