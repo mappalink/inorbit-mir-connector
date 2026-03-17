@@ -147,12 +147,13 @@ class MirConnector(Connector):
         # Check if the InOrbit edge executor is idle
         executor_idle = self._get_session().missions_module.executor.wait_until_idle(0)
 
-        # Re-enable native mission tracking only when both the edge executor
-        # AND the MiR robot are idle. This prevents native tracking from picking
-        # up the just-completed compiled MiR mission as a separate entry.
+        # Re-enable native mission tracking when edge executor is idle.
+        # Clear managed queue IDs when MiR is also idle (no active missions).
+        mir_idle = self.status.get("state_id") == 3  # Ready
         if executor_idle:
-            mir_idle = self.status.get("state_id") == 3  # Ready
-            self.mission_tracking.mir_mission_tracking_enabled = mir_idle
+            self.mission_tracking.mir_mission_tracking_enabled = True
+        if mir_idle:
+            self.mission_tracking.clear_managed_queue_ids()
 
         # Pose (degrees -> radians)
         self.publish_pose(
@@ -305,7 +306,7 @@ class MirConnector(Connector):
                 x, y = float(pose["x"]), float(pose["y"])
                 orientation = math.degrees(float(pose["theta"]))
                 await self.mir_api.abort_all_missions()
-                await self.mir_api.queue_mission(
+                resp = await self.mir_api.queue_mission(
                     mission_id,
                     message="InOrbit Waypoint",
                     parameters=[
@@ -315,6 +316,7 @@ class MirConnector(Connector):
                     ],
                     description="Mission created by InOrbit",
                 )
+                self.mission_tracking.add_managed_queue_id(resp.get("id"))
             else:
                 self._logger.error("No waypoint mission id or temporary missions group enabled")
                 options["result_function"](
@@ -370,17 +372,13 @@ class MirConnector(Connector):
             await self.mir_api.set_state(SetStateId.READY.value)
 
         elif script_name == "queue_mission" and "--mission_id" in script_args:
-            self.mission_tracking.mir_mission_tracking_enabled = (
-                self._get_session().missions_module.executor.wait_until_idle(0)
-            )
-            await self.mir_api.queue_mission(script_args["--mission_id"])
+            resp = await self.mir_api.queue_mission(script_args["--mission_id"])
+            self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name == "run_mission_now" and "--mission_id" in script_args:
-            self.mission_tracking.mir_mission_tracking_enabled = (
-                self._get_session().missions_module.executor.wait_until_idle(0)
-            )
             await self.mir_api.abort_all_missions()
-            await self.mir_api.queue_mission(script_args["--mission_id"])
+            resp = await self.mir_api.queue_mission(script_args["--mission_id"])
+            self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name == "abort_missions":
             self._get_session().missions_module.executor.cancel_mission("*")
@@ -470,7 +468,8 @@ class MirConnector(Connector):
             parameters=action_parameters,
             priority=1,
         )
-        await self.mir_api.queue_mission(mission_id)
+        resp = await self.mir_api.queue_mission(mission_id)
+        self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
     async def fetch_map(self, frame_id: str) -> MapConfigTemp | None:
         """Fetch a map from the MiR robot API."""

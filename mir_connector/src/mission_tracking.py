@@ -7,8 +7,11 @@
 Polls the MiR mission queue to find executing missions and publishes their
 state as ``mission_tracking`` key-value events so they appear in the InOrbit UI.
 
-When an InOrbit edge-executor mission is running, native tracking is disabled
-to avoid conflicting mission reports.
+Deduplication: the connector tracks which MiR queue entries it created on
+behalf of InOrbit (edge compiled missions, cloud NAV_GOAL waypoints,
+queue_mission commands). Native tracking skips those entries so InOrbit
+doesn't see the same mission twice — once from its own executor and once
+from native tracking.
 """
 
 import logging
@@ -31,12 +34,27 @@ class MirMissionTracking:
         # Disabled while an InOrbit edge-executor mission is running
         self.mir_mission_tracking_enabled = True
 
+        # MiR queue entry IDs created by the connector on behalf of InOrbit.
+        # Native tracking skips these to avoid duplicate reporting.
+        self._managed_queue_ids: set[int] = set()
+
         # Custom text for waitUntil expressions, set via set_waiting_for command
         self.waiting_for_text = ""
 
         self.executing_mission_id = None
         self.last_reported_mission_id = None
         self.last_reported_mission_progress = 0.0
+
+    def add_managed_queue_id(self, queue_id: int):
+        """Register a MiR queue entry as managed by InOrbit (skip in native tracking)."""
+        self._managed_queue_ids.add(queue_id)
+        self.logger.debug(f"Registered InOrbit-managed queue entry: {queue_id}")
+
+    def clear_managed_queue_ids(self):
+        """Clear managed queue IDs. Called when MiR returns to idle."""
+        if self._managed_queue_ids:
+            self.logger.debug(f"Cleared {len(self._managed_queue_ids)} managed queue entries")
+            self._managed_queue_ids.clear()
 
     def _safe_localize_timestamp(self, timestamp_str: str) -> float:
         """Convert ISO timestamp string to Unix timestamp."""
@@ -68,6 +86,10 @@ class MirMissionTracking:
 
         mission = await self.get_current_mission()
         if not mission:
+            return
+
+        # Skip missions created by the connector on behalf of InOrbit
+        if mission["id"] in self._managed_queue_ids:
             return
 
         completed_percent = len(mission["actions"]) / len(mission["definition"]["actions"])
