@@ -20,6 +20,7 @@ from mir_connector.src.mir_api.missions_group import (
     NullMissionsGroupHandler,
     TmpMissionsGroupHandler,
 )
+from mir_connector.src.mission.translator import NESTABLE_MIR_ACTIONS
 from mir_connector.src.mission_exec import MirMissionExecutor
 from mir_connector.src.mission_tracking import MirMissionTracking
 from mir_connector.src.robot.robot import Robot
@@ -421,11 +422,74 @@ class MirConnector(Connector):
                 )
                 return
 
+        elif script_name in NESTABLE_MIR_ACTIONS:
+            await self._send_action_over_missions(script_name, script_args)
+
         else:
             # Unknown custom commands may be handled by the edge-sdk (e.g. user_scripts)
             return
 
         result_fn(CommandResultCode.SUCCESS)
+
+    async def _send_action_over_missions(self, action_type: str, script_args: dict):
+        """Create a temporary MiR mission with a single native action and queue it.
+
+        Handles cloud-mode runAction steps for all NESTABLE_MIR_ACTIONS
+        (relative_move, adjust_localization, docking, sound, light, etc.).
+        Same pattern as _send_waypoint_over_missions() but for arbitrary action types.
+        """
+        mission_id = str(uuid.uuid4())
+
+        if not self.mission_group.missions_group_id:
+            try:
+                await self.mission_group.setup_connector_missions()
+            except Exception as ex:
+                self._logger.error(f"Failed to setup connector missions: {ex}")
+            if not self.mission_group.missions_group_id:
+                raise Exception("Connector missions group not set up")
+
+        await self.mir_api.create_mission(
+            group_id=self.mission_group.missions_group_id,
+            name=f"InOrbit {action_type}",
+            guid=mission_id,
+            description=f"Cloud runAction: {action_type}",
+        )
+
+        # Strip -- prefix from cloud argument names and coerce types
+        param_values = {}
+        for k, v in script_args.items():
+            key = k.lstrip("-")
+            if key == "filename":
+                continue  # ActionDefinition routing arg, not a MiR param
+            # Coerce string values from COMMAND_CUSTOM_COMMAND to native types
+            if isinstance(v, str):
+                low = v.lower()
+                if low in ("true", "false"):
+                    v = low == "true"
+                else:
+                    try:
+                        v = float(v)
+                        if v == int(v):
+                            v = int(v)
+                    except ValueError:
+                        pass
+            param_values[key] = v
+
+        action_parameters = [
+            {"value": v, "input_name": None, "guid": str(uuid.uuid4()), "id": k}
+            for k, v in param_values.items()
+        ]
+
+        self._logger.info(f"Cloud runAction: {action_type} with {len(action_parameters)} params")
+
+        await self.mir_api.add_action_to_mission(
+            action_type=action_type,
+            mission_id=mission_id,
+            parameters=action_parameters,
+            priority=1,
+        )
+        resp = await self.mir_api.queue_mission(mission_id)
+        self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
     async def _send_waypoint_over_missions(self, pose):
         """Create a temporary move mission and queue it."""
