@@ -176,7 +176,7 @@ class CreateMirNativeMissionNode(BehaviorTree):
 
     def dump_object(self):
         obj = super().dump_object()
-        obj["step"] = self._step.model_dump(mode="json")
+        obj["step"] = self._step.model_dump(mode="json", exclude_none=True)
         return obj
 
     @classmethod
