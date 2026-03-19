@@ -183,8 +183,10 @@ class MirMissionExecutor:
                 CommandResultCode.FAILURE, execution_status_details=f"Invalid JSON: {e}"
             )
         except Exception as e:
-            self.logger.error(f"Failed to execute mission: {e}")
-            options["result_function"](CommandResultCode.FAILURE, execution_status_details=str(e))
+            self.logger.error(f"Failed to execute mission: {type(e).__name__}: {e!r}")
+            options["result_function"](
+                CommandResultCode.FAILURE, execution_status_details=f"{type(e).__name__}: {e}"
+            )
 
     async def _handle_cancel(self, script_args: dict, options: dict) -> None:
         mission_id = script_args.get("missionId")
