@@ -16,6 +16,7 @@ from inorbit_edge_executor.behavior_tree import (
     MissionCompletedNode,
     MissionInProgressNode,
     MissionPausedNode,
+    register_accepted_node_types,
 )
 from inorbit_edge_executor.inorbit import MissionStatus
 from mir_connector.src.mission.behavior_tree import (
@@ -39,6 +40,9 @@ class LoggingMissionCompletedNode(MissionCompletedNode):
         except Exception as e:
             logger.error(f"MissionCompletedNode: mt.completed() raised {e}")
             raise
+
+
+register_accepted_node_types([LoggingMissionCompletedNode])
 
 
 class MirTreeBuilder(DefaultTreeBuilder):
