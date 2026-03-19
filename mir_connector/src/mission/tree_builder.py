@@ -20,7 +20,6 @@ from inorbit_edge_executor.behavior_tree import (
 )
 from inorbit_edge_executor.inorbit import MissionStatus
 from mir_connector.src.mission.behavior_tree import (
-    CleanupMirMissionNode,
     MirBehaviorTreeBuilderContext,
     MirMissionAbortedNode,
     MirNodeFromStepBuilder,
@@ -81,7 +80,10 @@ class MirTreeBuilder(DefaultTreeBuilder):
         )
 
         on_pause = BehaviorTreeSequential(label="pause handlers")
-        on_pause.add_node(CleanupMirMissionNode(context, label="cleanup mir mission"))
+        # No CleanupMirMissionNode here — MiR mission stays queued.
+        # MirWorkerPool.pause_mission() sets robot state to PAUSE, which
+        # suspends the active MiR mission in place. On resume, set_state(READY)
+        # lets the MiR mission continue from where it was.
         on_pause.add_node(MissionPausedNode(context, label="mission paused"))
 
         tree = BehaviorTreeErrorHandler(
