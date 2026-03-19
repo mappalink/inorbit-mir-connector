@@ -174,6 +174,11 @@ class CreateMirNativeMissionNode(BehaviorTree):
             self._shared_memory.set(SharedMemoryKeys.MIR_ERROR_MESSAGE, error_msg)
             raise RuntimeError(error_msg) from e
 
+    def dump_object(self):
+        obj = super().dump_object()
+        obj["step"] = self._step.model_dump(mode="json")
+        return obj
+
     @classmethod
     def from_object(cls, context, step, **kwargs):
         if isinstance(step, dict):
@@ -234,9 +239,15 @@ class WaitForMirMissionCompletionNode(BehaviorTree):
             logger.debug(f"MiR mission {queue_id} state: {state}")
             await asyncio.sleep(_POLL_INTERVAL_SECS)
 
+    def dump_object(self):
+        obj = super().dump_object()
+        if self._timeout_secs is not None:
+            obj["timeout_secs"] = self._timeout_secs
+        return obj
+
     @classmethod
-    def from_object(cls, context, **kwargs):
-        return WaitForMirMissionCompletionNode(context, **kwargs)
+    def from_object(cls, context, timeout_secs=None, **kwargs):
+        return WaitForMirMissionCompletionNode(context, timeout_secs=timeout_secs, **kwargs)
 
 
 class MirMissionAbortedNode(MissionAbortedNode):
