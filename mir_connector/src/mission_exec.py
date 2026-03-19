@@ -142,6 +142,13 @@ class MirMissionExecutor:
     def is_initialized(self) -> bool:
         return self._initialized
 
+    async def abort_all(self):
+        """Abort all active edge missions."""
+        if self._worker_pool:
+            for mission_id in list(self._worker_pool._workers.keys()):
+                self.logger.info(f"Aborting edge mission {mission_id}")
+                await self._worker_pool.abort_mission(mission_id)
+
     async def handle_command(self, script_name: str, script_args: dict, options: dict) -> bool:
         """Handle mission-related commands. Returns True if handled."""
         if not self._initialized:

@@ -210,6 +210,8 @@ class WaitForMirMissionCompletionNode(BehaviorTree):
             f"Waiting for MiR mission queue entry {queue_id} (mission {mission_guid}) to complete"
         )
         start_time = time.time()
+        consecutive_errors = 0
+        max_consecutive_errors = 10
 
         while True:
             if self._timeout_secs and (time.time() - start_time) > self._timeout_secs:
@@ -217,8 +219,18 @@ class WaitForMirMissionCompletionNode(BehaviorTree):
 
             try:
                 entry = await self._mir_api.get_mission_queue_entry(queue_id)
+                consecutive_errors = 0
             except Exception as e:
-                logger.warning(f"Failed to poll mission queue entry {queue_id}: {e}")
+                consecutive_errors += 1
+                logger.warning(
+                    f"Failed to poll mission queue entry {queue_id} "
+                    f"({consecutive_errors}/{max_consecutive_errors}): {e}"
+                )
+                if consecutive_errors >= max_consecutive_errors:
+                    error_msg = f"MiR mission {queue_id} lost: {consecutive_errors} consecutive poll failures"
+                    logger.error(error_msg)
+                    self._shared_memory.set(SharedMemoryKeys.MIR_ERROR_MESSAGE, error_msg)
+                    raise RuntimeError(error_msg)
                 await asyncio.sleep(_POLL_INTERVAL_SECS)
                 continue
 

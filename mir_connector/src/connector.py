@@ -381,6 +381,8 @@ class MirConnector(Connector):
 
         elif script_name == "abort_missions":
             self._get_session().missions_module.executor.cancel_mission("*")
+            if self.mission_executor and self.mission_executor.is_initialized():
+                await self.mission_executor.abort_all()
             await self.mir_api.abort_all_missions()
 
         elif script_name == "set_state" and "--state_id" in script_args:
