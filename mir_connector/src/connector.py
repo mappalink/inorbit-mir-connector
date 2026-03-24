@@ -371,13 +371,13 @@ class MirConnector(Connector):
         elif script_name == "resumeRobot":
             await self.mir_api.set_state(SetStateId.READY.value)
 
-        elif script_name == "queue_mission" and "--mission_id" in script_args:
-            resp = await self.mir_api.queue_mission(script_args["--mission_id"])
+        elif script_name == "queue_mission" and "mission_id" in script_args:
+            resp = await self.mir_api.queue_mission(script_args["mission_id"])
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
-        elif script_name == "run_mission_now" and "--mission_id" in script_args:
+        elif script_name == "run_mission_now" and "mission_id" in script_args:
             await self.mir_api.abort_all_missions()
-            resp = await self.mir_api.queue_mission(script_args["--mission_id"])
+            resp = await self.mir_api.queue_mission(script_args["mission_id"])
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name == "abort_missions":
@@ -386,8 +386,8 @@ class MirConnector(Connector):
                 await self.mission_executor.abort_all()
             await self.mir_api.abort_all_missions()
 
-        elif script_name == "set_state" and "--state_id" in script_args:
-            state_id = script_args["--state_id"]
+        elif script_name == "set_state" and "state_id" in script_args:
+            state_id = script_args["state_id"]
             if not state_id.isdigit() or int(state_id) not in MIR_STATE:
                 result_fn(
                     CommandResultCode.FAILURE,
@@ -396,24 +396,24 @@ class MirConnector(Connector):
                 return
             await self.mir_api.set_state(int(state_id))
 
-        elif script_name == "set_state" and "--clear_error" in script_args:
+        elif script_name == "set_state" and "clear_error" in script_args:
             await self.mir_api.clear_error()
 
-        elif script_name == "set_waiting_for" and "--text" in script_args:
-            self._logger.info(f"Setting 'waiting for' value to {script_args['--text']}")
-            self.mission_tracking.waiting_for_text = script_args["--text"]
+        elif script_name == "set_waiting_for" and "text" in script_args:
+            self._logger.info(f"Setting 'waiting for' value to {script_args['text']}")
+            self.mission_tracking.waiting_for_text = script_args["text"]
 
         elif script_name == "localize":
-            if all(k in script_args for k in ["--x", "--y", "--orientation", "--map_id"]):
+            if all(k in script_args for k in ["x", "y", "orientation", "map_id"]):
                 status = {
                     "position": {
-                        "x": float(script_args["--x"]),
-                        "y": float(script_args["--y"]),
-                        "orientation": float(script_args["--orientation"]),
+                        "x": float(script_args["x"]),
+                        "y": float(script_args["y"]),
+                        "orientation": float(script_args["orientation"]),
                     },
-                    "map_id": script_args["--map_id"],
+                    "map_id": script_args["map_id"],
                 }
-                self._logger.info(f"Changing map to {script_args['--map_id']}")
+                self._logger.info(f"Changing map to {script_args['map_id']}")
                 await self.mir_api.set_status(status)
             else:
                 result_fn(
@@ -455,10 +455,10 @@ class MirConnector(Connector):
             description=f"Cloud runAction: {action_type}",
         )
 
-        # Strip -- prefix from cloud argument names and coerce types
+        # Coerce string values from COMMAND_CUSTOM_COMMAND to native types
         param_values = {}
         for k, v in script_args.items():
-            key = k.lstrip("-")
+            key = k
             if key == "filename":
                 continue  # ActionDefinition routing arg, not a MiR param
             # Coerce string values from COMMAND_CUSTOM_COMMAND to native types
