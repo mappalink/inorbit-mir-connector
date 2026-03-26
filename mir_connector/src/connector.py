@@ -422,6 +422,13 @@ class MirConnector(Connector):
                 )
                 return
 
+        elif script_name == "goto_position" and "position_guid" in script_args:
+            resp = await self.mir_api.queue_mission(
+                "mirconst-guid-0000-0001-actionlist00",
+                parameters=[{"input_name": "Position", "value": script_args["position_guid"]}],
+            )
+            self.mission_tracking.add_managed_queue_id(resp.get("id"))
+
         elif script_name in NESTABLE_MIR_ACTIONS:
             await self._send_action_over_missions(script_name, script_args)
 
