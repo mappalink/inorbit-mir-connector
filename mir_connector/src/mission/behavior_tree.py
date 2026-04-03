@@ -47,7 +47,7 @@ _POLL_INTERVAL_SECS = 1.0
 
 # MiR mission queue states
 _STATE_DONE = "Done"
-_STATE_ABORT = "Abort"
+_STATE_ABORT = "Aborted"
 
 
 class SharedMemoryKeys(StrEnum):
