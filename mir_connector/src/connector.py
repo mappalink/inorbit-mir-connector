@@ -7,8 +7,10 @@
 import base64
 import math
 import uuid
+from typing import override
 
 import pytz
+from inorbit_connector.commands import parse_custom_command_args
 from inorbit_connector.connector import Connector, CommandResultCode
 from inorbit_connector.models import MapConfigTemp
 from inorbit_edge.robot import COMMAND_CUSTOM_COMMAND, COMMAND_MESSAGE, COMMAND_NAV_GOAL
@@ -121,11 +123,13 @@ class MirConnector(Connector):
     def _is_robot_online(self) -> bool:
         return self.robot.api_connected
 
+    @override
     async def _connect(self) -> None:
         self.robot.start()
         await self.mission_group.start()
         await self.mission_executor.initialize()
 
+    @override
     async def _disconnect(self) -> None:
         await self.mission_group.cleanup_connector_missions()
         await self.mission_group.stop()
@@ -137,6 +141,7 @@ class MirConnector(Connector):
         except Exception as e:
             self._logger.error(f"Error shutting down mission executor: {e}")
 
+    @override
     async def _execution_loop(self) -> None:
         status = self.robot.status
         if not status and self.status is None:
@@ -291,6 +296,7 @@ class MirConnector(Connector):
             except (ValueError, TypeError):
                 pass
 
+    @override
     async def _inorbit_command_handler(self, command_name, args, options):
         self._logger.info(f"Received command '{command_name}' with {len(args)} arguments")
         self._logger.debug(f"Command details: {command_name} - {args}")
@@ -338,24 +344,7 @@ class MirConnector(Connector):
 
     async def _handle_custom_command(self, args, options):
         result_fn = options["result_function"]
-
-        if len(args) < 2:
-            self._logger.error(f"Invalid argument count: expected >=2, got {len(args)}")
-            result_fn(CommandResultCode.FAILURE, execution_status_details="Invalid arguments")
-            return
-
-        script_name = args[0]
-        args_raw = list(args[1])
-
-        if not (
-            isinstance(args_raw, list)
-            and len(args_raw) % 2 == 0
-            and all(isinstance(key, str) for key in args_raw[::2])
-        ):
-            result_fn(CommandResultCode.FAILURE, execution_status_details="Invalid arguments")
-            return
-
-        script_args = dict(zip(args_raw[::2], args_raw[1::2]))
+        script_name, script_args = parse_custom_command_args(args)
         self._logger.debug(f"Parsed arguments: {script_args}")
 
         # Try edge-executor first (handles executeMissionAction, cancelMissionAction, etc.)
@@ -543,6 +532,7 @@ class MirConnector(Connector):
         resp = await self.mir_api.queue_mission(mission_id)
         self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
+    @override
     async def fetch_map(self, frame_id: str) -> MapConfigTemp | None:
         """Fetch a map from the MiR robot API."""
         self._logger.info(f"Fetching map '{frame_id}' from robot")
