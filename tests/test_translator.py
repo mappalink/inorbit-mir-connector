@@ -107,6 +107,18 @@ class TestTranslateRunActionNestable:
         assert step.actions[1].action_type == "docking"
         assert step.actions[1].parameters == {"marker": "guid-1"}
 
+    def test_set_footprint_nestable(self):
+        m = _mission([_pose_wp(1, 2), _run_action("set_footprint", {"footprint": "guid-fp"})])
+        result = InOrbitToMirTranslator.translate(m)
+
+        assert len(result.definition.steps) == 1
+        step = result.definition.steps[0]
+        assert isinstance(step, MissionStepExecuteMirNativeMission)
+        assert len(step.actions) == 2
+        assert isinstance(step.actions[1], MirAction)
+        assert step.actions[1].action_type == "set_footprint"
+        assert step.actions[1].parameters == {"footprint": "guid-fp"}
+
 
 class TestTranslateRunActionNonNestable:
     def test_non_nestable_action_flushes(self):

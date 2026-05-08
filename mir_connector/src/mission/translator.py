@@ -52,6 +52,7 @@ NESTABLE_MIR_ACTIONS: set[str] = {
     "light",
     "pickup_cart",
     "place_cart",
+    "set_footprint",
 }
 
 
