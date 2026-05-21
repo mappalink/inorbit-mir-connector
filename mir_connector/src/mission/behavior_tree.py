@@ -35,7 +35,7 @@ from mir_connector.src.mission.datatypes import (
     MirWaypoint,
     MissionStepExecuteMirNativeMission,
 )
-from mir_connector.src.mir_api import MirApi
+from mir_connector.src.mir_api import MirApi, resolve_marker_type
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,10 @@ class CreateMirNativeMissionNode(BehaviorTree):
                     param_values = dict(action.parameters)
                 else:
                     raise TypeError(f"Unexpected action type: {type(action)}")
+
+                param_values = await resolve_marker_type(
+                    self._mir_api, action_type, param_values, logger
+                )
 
                 action_parameters = [
                     {"value": v, "input_name": None, "guid": str(uuid.uuid4()), "id": k}

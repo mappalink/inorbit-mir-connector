@@ -17,7 +17,7 @@ from inorbit_edge.robot import COMMAND_CUSTOM_COMMAND, COMMAND_MESSAGE, COMMAND_
 
 from mir_connector import __version__ as connector_version
 from mir_connector.src.config.models import ConnectorConfig
-from mir_connector.src.mir_api import MirApi, SetStateId
+from mir_connector.src.mir_api import MirApi, SetStateId, resolve_marker_type
 from mir_connector.src.mir_api.missions_group import (
     NullMissionsGroupHandler,
     TmpMissionsGroupHandler,
@@ -470,6 +470,10 @@ class MirConnector(Connector):
                     except ValueError:
                         pass
             param_values[key] = v
+
+        param_values = await resolve_marker_type(
+            self.mir_api, action_type, param_values, self._logger
+        )
 
         action_parameters = [
             {"value": v, "input_name": None, "guid": str(uuid.uuid4()), "id": k}

@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-from .mir_api import MirApi, SetStateId
+from .mir_api import MirApi, SetStateId, resolve_marker_type
 
-__all__ = ["MirApi", "SetStateId"]
+__all__ = ["MirApi", "SetStateId", "resolve_marker_type"]
