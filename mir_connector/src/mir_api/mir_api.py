@@ -289,6 +289,17 @@ class MirApi:
         return (await self._get(f"/positions/{position_guid}/docking_offsets")).json()
 
 
+class DockingOffsetError(Exception):
+    """A ``docking`` action's ``marker_type`` could not be resolved.
+
+    Raised when a docking action gives a ``marker`` but no ``marker_type`` and
+    the connector cannot fill it in — the position has no docking offset, or
+    the offset lookup failed. MiR rejects an offsetless docking action, so
+    failing here surfaces a clear cause instead of an opaque downstream HTTP
+    400.
+    """
+
+
 async def resolve_marker_type(
     mir_api: MirApi,
     action_type: str,
@@ -302,17 +313,13 @@ async def resolve_marker_type(
     record). A position has at most one offset, so ``marker_type`` can be
     derived from ``marker`` alone.
 
-    Returns a copy of ``parameters``:
+    Returns a copy of ``parameters`` with ``marker_type`` filled in. Raises
+    ``DockingOffsetError`` when the marker has no docking offset, or when the
+    offset lookup fails — MiR rejects an offsetless docking action, so failing
+    here gives a clear cause rather than an opaque downstream HTTP 400.
 
-    * ``marker_type`` is set when the marker has a docking offset.
-    * ``marker_type`` is omitted when the marker has no offset, or when
-      the lookup fails. Omitting it does not guarantee the dock will
-      succeed: MiR aborts the docking action at runtime if the marker
-      requires an offset. The connector cannot synthesise one — the
-      position must have an offset configured on the robot.
-
-    Non-docking actions, and docking actions whose ``marker_type`` is
-    already set to a non-empty value, pass through unchanged.
+    Non-docking actions, and docking actions whose ``marker_type`` is already
+    set to a non-empty value, pass through unchanged.
     """
     if action_type != "docking":
         return parameters
@@ -320,19 +327,18 @@ async def resolve_marker_type(
     if not marker or parameters.get("marker_type"):
         return parameters
 
-    resolved = {k: v for k, v in parameters.items() if k != "marker_type"}
     try:
         offsets = await mir_api.get_position_docking_offsets(marker)
         guid = offsets[0]["guid"] if offsets else None
     except Exception as ex:
-        log.warning(f"docking: marker_type lookup failed for marker {marker}: {ex}")
-        return resolved
-    if guid:
-        resolved["marker_type"] = guid
-        log.info(f"docking: resolved marker_type {guid} for marker {marker}")
-    else:
-        log.warning(
-            f"docking: marker {marker} has no docking offset; docking without "
-            f"marker_type — MiR will abort the dock if this marker requires one"
+        raise DockingOffsetError(
+            f"docking: could not look up the docking offset for marker {marker}: {ex}"
+        ) from ex
+    if not guid:
+        raise DockingOffsetError(
+            f"docking: marker {marker} has no docking offset configured on the "
+            f"robot — MiR requires marker_type for docking; configure an offset "
+            f"for this position"
         )
-    return resolved
+    log.info(f"docking: resolved marker_type {guid} for marker {marker}")
+    return {**parameters, "marker_type": guid}

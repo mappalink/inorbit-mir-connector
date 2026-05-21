@@ -10,7 +10,7 @@ import logging
 
 import pytest
 
-from mir_connector.src.mir_api import resolve_marker_type
+from mir_connector.src.mir_api import DockingOffsetError, resolve_marker_type
 
 _LOG = logging.getLogger("test")
 
@@ -42,11 +42,10 @@ async def test_resolves_marker_type_when_offset_exists():
 
 
 @pytest.mark.asyncio
-async def test_omits_marker_type_when_no_offset():
+async def test_raises_when_no_offset():
     api = _FakeMirApi(offsets=[])
-    result = await resolve_marker_type(api, "docking", {"marker": _MARKER}, _LOG)
-    assert result == {"marker": _MARKER}
-    assert "marker_type" not in result
+    with pytest.raises(DockingOffsetError, match="no docking offset"):
+        await resolve_marker_type(api, "docking", {"marker": _MARKER}, _LOG)
 
 
 @pytest.mark.asyncio
@@ -66,18 +65,17 @@ async def test_explicit_marker_type_passes_through():
 
 
 @pytest.mark.asyncio
-async def test_lookup_failure_falls_back_to_no_marker_type():
+async def test_raises_when_lookup_fails():
     api = _FakeMirApi(raises=RuntimeError("TCP reset"))
-    result = await resolve_marker_type(api, "docking", {"marker": _MARKER, "retries": 10}, _LOG)
-    assert result == {"marker": _MARKER, "retries": 10}
-    assert "marker_type" not in result
+    with pytest.raises(DockingOffsetError, match="could not look up"):
+        await resolve_marker_type(api, "docking", {"marker": _MARKER}, _LOG)
 
 
 @pytest.mark.asyncio
-async def test_malformed_offset_response_falls_back():
+async def test_raises_when_offset_response_malformed():
     api = _FakeMirApi(offsets=[{"no_guid_field": 1}])
-    result = await resolve_marker_type(api, "docking", {"marker": _MARKER}, _LOG)
-    assert "marker_type" not in result
+    with pytest.raises(DockingOffsetError):
+        await resolve_marker_type(api, "docking", {"marker": _MARKER}, _LOG)
 
 
 @pytest.mark.asyncio

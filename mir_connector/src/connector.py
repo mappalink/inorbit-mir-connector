@@ -17,7 +17,12 @@ from inorbit_edge.robot import COMMAND_CUSTOM_COMMAND, COMMAND_MESSAGE, COMMAND_
 
 from mir_connector import __version__ as connector_version
 from mir_connector.src.config.models import ConnectorConfig
-from mir_connector.src.mir_api import MirApi, SetStateId, resolve_marker_type
+from mir_connector.src.mir_api import (
+    DockingOffsetError,
+    MirApi,
+    SetStateId,
+    resolve_marker_type,
+)
 from mir_connector.src.mir_api.missions_group import (
     NullMissionsGroupHandler,
     TmpMissionsGroupHandler,
@@ -419,7 +424,11 @@ class MirConnector(Connector):
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name in NESTABLE_MIR_ACTIONS:
-            await self._send_action_over_missions(script_name, script_args)
+            try:
+                await self._send_action_over_missions(script_name, script_args)
+            except DockingOffsetError as ex:
+                result_fn(CommandResultCode.FAILURE, execution_status_details=str(ex))
+                return
 
         else:
             # Unknown custom commands may be handled by the edge-sdk (e.g. user_scripts)

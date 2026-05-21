@@ -35,7 +35,7 @@ from mir_connector.src.mission.datatypes import (
     MirWaypoint,
     MissionStepExecuteMirNativeMission,
 )
-from mir_connector.src.mir_api import MirApi, resolve_marker_type
+from mir_connector.src.mir_api import DockingOffsetError, MirApi, resolve_marker_type
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +172,12 @@ class CreateMirNativeMissionNode(BehaviorTree):
             self._shared_memory.set(SharedMemoryKeys.MIR_QUEUE_ID, queue_id)
             logger.info(f"Queued MiR native mission: {mission_guid} (queue id: {queue_id})")
 
+        except DockingOffsetError as e:
+            # Already a clear, operator-facing message — surface it as-is.
+            error_msg = str(e)
+            logger.error(error_msg)
+            self._shared_memory.set(SharedMemoryKeys.MIR_ERROR_MESSAGE, error_msg)
+            raise RuntimeError(error_msg) from e
         except Exception as e:
             error_msg = f"Failed to create/queue MiR native mission: {e}"
             logger.error(error_msg)

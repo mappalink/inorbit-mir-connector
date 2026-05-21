@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-from .mir_api import MirApi, SetStateId, resolve_marker_type
+from .mir_api import DockingOffsetError, MirApi, SetStateId, resolve_marker_type
 
-__all__ = ["MirApi", "SetStateId", "resolve_marker_type"]
+__all__ = ["DockingOffsetError", "MirApi", "SetStateId", "resolve_marker_type"]
