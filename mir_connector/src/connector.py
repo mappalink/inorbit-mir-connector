@@ -303,6 +303,40 @@ class MirConnector(Connector):
 
     @override
     async def _inorbit_command_handler(self, command_name, args, options):
+        """Dispatch an InOrbit command, reporting a result even when it raises.
+
+        Every branch below talks to the MiR REST API and can raise. Without this
+        wrapper the exception escaped the handler, no result was ever sent, and
+        InOrbit treated the command — and any mission step running it — as
+        successful. Observed at FM 2026-09-03: `goto_position` failed with
+        `RemoteProtocolError: Server disconnected without sending a response`,
+        the robot never moved, and the mission still reported completed/OK.
+        A failure must reach InOrbit; silence must not read as success.
+        """
+        result_fn = options.get("result_function")
+        reported = False
+
+        def report_once(code, *fn_args, **fn_kwargs):
+            nonlocal reported
+            reported = True
+            if result_fn:
+                result_fn(code, *fn_args, **fn_kwargs)
+
+        options = {**options, "result_function": report_once}
+        try:
+            await self._dispatch_inorbit_command(command_name, args, options)
+        except Exception as e:
+            self._logger.error(
+                f"Command '{command_name}' failed: {type(e).__name__}: {e}", exc_info=True
+            )
+            if not reported:
+                report_once(
+                    CommandResultCode.FAILURE,
+                    execution_status_details=f"{type(e).__name__}: {e}",
+                )
+            raise
+
+    async def _dispatch_inorbit_command(self, command_name, args, options):
         self._logger.info(f"Received command '{command_name}' with {len(args)} arguments")
         self._logger.debug(f"Command details: {command_name} - {args}")
 
