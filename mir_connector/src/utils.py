@@ -4,6 +4,7 @@
 
 """Utility functions for MiR connector data processing."""
 
+import json
 import re
 from typing import Optional
 
@@ -11,6 +12,31 @@ from typing import Optional
 def to_inorbit_percent(value: float) -> float:
     """Convert percentage (0-100) to InOrbit format (0-1)."""
     return max(0.0, min(100.0, value)) / 100.0
+
+
+def format_mir_text(text: Optional[str]) -> Optional[str]:
+    r"""Render a MiR message template into plain text.
+
+    Firmware 2.x reports some texts (mission_text on a failed charge, for one)
+    as a template with its arguments, quotes backslash-escaped:
+        {\"message\": \"... %(last_measurement).2f V)\", \"args\": {\"last_measurement\":27.442}}
+    Anything that is not such a template is returned unchanged.
+    """
+    if not isinstance(text, str) or not text.lstrip().startswith("{"):
+        return text
+    for candidate in (text, text.replace('\\"', '"')):
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("message"), str):
+            return text
+        message = parsed["message"]
+        try:
+            return message % (parsed.get("args") or {})
+        except (KeyError, TypeError, ValueError):
+            return message
+    return text
 
 
 def parse_number(value: object) -> Optional[float]:
