@@ -33,7 +33,11 @@ from mir_connector.src.mission_tracking import MirMissionTracking
 from mir_connector.src.robot.robot import Robot
 
 from inorbit_edge_executor.inorbit import InOrbitAPI
-from mir_connector.src.utils import to_inorbit_percent, calculate_usage_percent
+from mir_connector.src.utils import (
+    calculate_usage_percent,
+    format_mir_text,
+    to_inorbit_percent,
+)
 
 # Available MiR states to select via actions
 MIR_STATE = {3: "READY", 4: "PAUSE", 11: "MANUALCONTROL"}
@@ -185,7 +189,7 @@ class MirConnector(Connector):
         if executor_idle:
             mode_text = self.status.get("mode_text")
             state_text = self.status.get("state_text")
-            mission_text = self.status.get("mission_text")
+            mission_text = format_mir_text(self.status.get("mission_text"))
         else:
             mode_text = "Mission"
             state_text = "Executing"
