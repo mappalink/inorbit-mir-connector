@@ -55,6 +55,24 @@ HARDDRIVE_PATH = "/Computer/PC/Harddrive"
 WIFI_PATH = "/Computer/Network/Wifi"
 
 
+def mission_inputs(script_args: dict) -> list[dict] | None:
+    """Mission inputs for ``queue_mission`` / ``run_mission_now``.
+
+    A MiR mission can declare inputs (variables) that must be given when it is
+    queued. Every command argument besides ``mission_id`` is passed as one, under
+    its own name. The built-in ChargeAtStation is the case that needs it: without
+    its ``chargingStationPosition`` the docking step looks for marker "0" and the
+    robot goes to Error ("Unable to find the end position of the docking in the
+    database"). ``goto_position`` passes ``Position`` to the Move mission the same way.
+    """
+    inputs = [
+        {"input_name": name, "value": value}
+        for name, value in script_args.items()
+        if name != "mission_id"
+    ]
+    return inputs or None
+
+
 class MirConnector(Connector):
     """Connector between a MiR robot and InOrbit.
 
@@ -405,12 +423,16 @@ class MirConnector(Connector):
             await self.mir_api.set_state(SetStateId.READY.value)
 
         elif script_name == "queue_mission" and "mission_id" in script_args:
-            resp = await self.mir_api.queue_mission(script_args["mission_id"])
+            resp = await self.mir_api.queue_mission(
+                script_args["mission_id"], parameters=mission_inputs(script_args)
+            )
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name == "run_mission_now" and "mission_id" in script_args:
             await self.mir_api.abort_all_missions()
-            resp = await self.mir_api.queue_mission(script_args["mission_id"])
+            resp = await self.mir_api.queue_mission(
+                script_args["mission_id"], parameters=mission_inputs(script_args)
+            )
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
 
         elif script_name == "abort_missions":
