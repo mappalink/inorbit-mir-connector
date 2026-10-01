@@ -9,6 +9,12 @@ The tree for a single MissionStepExecuteMirNativeMission step:
     BehaviorTreeSequential("Navigate N waypoints")
       +-- CreateMirNativeMissionNode   -> create_mission + N x add_action + queue
       +-- WaitForMirMissionCompletionNode -> poll mission_queue until Done/Abort
+
+A ``goto_position`` runAction step (a MiR position, by GUID) gets the same wait:
+
+    BehaviorTreeSequential("Go to position")
+      +-- QueueMirMoveToPositionNode   -> queue the MiR built-in Move mission
+      +-- WaitForMirMissionCompletionNode -> poll mission_queue until Done/Abort
 """
 
 from __future__ import annotations
@@ -30,6 +36,8 @@ from inorbit_edge_executor.behavior_tree import (
 )
 from inorbit_edge_executor.inorbit import MissionStatus
 
+from inorbit_edge_executor.datatypes import MissionStepRunAction
+
 from mir_connector.src.mission.datatypes import (
     MirAction,
     MirWaypoint,
@@ -41,6 +49,12 @@ logger = logging.getLogger(__name__)
 
 # Distance threshold for MiR move missions (meters)
 _MIR_MOVE_DISTANCE_THRESHOLD = 0.1
+
+# MiR built-in "Move" mission: drives to the position passed as its Position parameter
+MIR_MOVE_MISSION_GUID = "mirconst-guid-0000-0001-actionlist00"
+
+# Custom command that sends the robot to a MiR position by GUID
+ACTION_GOTO_POSITION = "goto_position"
 
 # Polling interval for mission queue state checks
 _POLL_INTERVAL_SECS = 1.0
@@ -196,6 +210,52 @@ class CreateMirNativeMissionNode(BehaviorTree):
         return CreateMirNativeMissionNode(context, step, **kwargs)
 
 
+class QueueMirMoveToPositionNode(BehaviorTree):
+    """Queues the MiR built-in Move mission for a position GUID."""
+
+    def __init__(
+        self,
+        context: MirBehaviorTreeBuilderContext,
+        position_guid: str,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._mir_api = context.mir_api
+        self._shared_memory = context.shared_memory
+        self._position_guid = position_guid
+
+        self._shared_memory.add(SharedMemoryKeys.MIR_MISSION_GUID, None)
+        self._shared_memory.add(SharedMemoryKeys.MIR_QUEUE_ID, None)
+        self._shared_memory.add(SharedMemoryKeys.MIR_ERROR_MESSAGE, None)
+
+    async def _execute(self):
+        logger.info(f"Queueing MiR Move mission to position {self._position_guid}")
+        try:
+            queue_response = await self._mir_api.queue_mission(
+                MIR_MOVE_MISSION_GUID,
+                parameters=[{"input_name": "Position", "value": self._position_guid}],
+            )
+        except Exception as e:
+            error_msg = f"Failed to queue MiR Move mission to {self._position_guid}: {e}"
+            logger.error(error_msg)
+            self._shared_memory.set(SharedMemoryKeys.MIR_ERROR_MESSAGE, error_msg)
+            raise RuntimeError(error_msg) from e
+
+        queue_id = queue_response.get("id")
+        self._shared_memory.set(SharedMemoryKeys.MIR_MISSION_GUID, MIR_MOVE_MISSION_GUID)
+        self._shared_memory.set(SharedMemoryKeys.MIR_QUEUE_ID, queue_id)
+        logger.info(f"Queued MiR Move mission to {self._position_guid} (queue id: {queue_id})")
+
+    def dump_object(self):
+        obj = super().dump_object()
+        obj["position_guid"] = self._position_guid
+        return obj
+
+    @classmethod
+    def from_object(cls, context, position_guid, **kwargs):
+        return QueueMirMoveToPositionNode(context, position_guid, **kwargs)
+
+
 class WaitForMirMissionCompletionNode(BehaviorTree):
     """Polls MiR mission queue until the queued native mission completes."""
 
@@ -347,10 +407,41 @@ class MirNodeFromStepBuilder(NodeFromStepBuilder):
         )
         return sequence
 
+    def visit_run_action(self, step: MissionStepRunAction) -> BehaviorTree:
+        """Run ``goto_position`` locally and wait for arrival.
+
+        Through the default RunActionNode the command reports success as soon
+        as the Move mission is queued, so the next step would start while the
+        robot is still driving.
+        """
+        if step.action_id != ACTION_GOTO_POSITION:
+            return super().visit_run_action(step)
+
+        position_guid = (step.arguments or {}).get("position_guid")
+        if not position_guid:
+            raise RuntimeError("goto_position action missing 'position_guid' argument")
+
+        label = step.label or f"Go to position {position_guid}"
+        sequence = BehaviorTreeSequential(label=label)
+        sequence.add_node(
+            QueueMirMoveToPositionNode(
+                self._mir_context, position_guid, label=f"Queue MiR Move for '{label}'"
+            )
+        )
+        sequence.add_node(
+            WaitForMirMissionCompletionNode(
+                self._mir_context,
+                timeout_secs=step.timeout_secs,
+                label=f"Wait for arrival '{label}'",
+            )
+        )
+        return sequence
+
 
 # Register node types for serialization/deserialization
 mir_node_types = [
     CreateMirNativeMissionNode,
+    QueueMirMoveToPositionNode,
     WaitForMirMissionCompletionNode,
     MirMissionAbortedNode,
     CleanupMirMissionNode,

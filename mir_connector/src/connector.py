@@ -27,6 +27,7 @@ from mir_connector.src.mir_api.missions_group import (
     NullMissionsGroupHandler,
     TmpMissionsGroupHandler,
 )
+from mir_connector.src.mission.behavior_tree import MIR_MOVE_MISSION_GUID
 from mir_connector.src.mission.translator import NESTABLE_MIR_ACTIONS
 from mir_connector.src.mission_exec import MirMissionExecutor
 from mir_connector.src.mission_tracking import MirMissionTracking
@@ -456,7 +457,7 @@ class MirConnector(Connector):
 
         elif script_name == "goto_position" and "position_guid" in script_args:
             resp = await self.mir_api.queue_mission(
-                "mirconst-guid-0000-0001-actionlist00",
+                MIR_MOVE_MISSION_GUID,
                 parameters=[{"input_name": "Position", "value": script_args["position_guid"]}],
             )
             self.mission_tracking.add_managed_queue_id(resp.get("id"))
